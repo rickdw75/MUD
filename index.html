@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Arcadia MUD — Rescue of the Princess</title>
+  <style>
+    :root {
+      --bg: #0d0f12;
+      --panel: #141820;
+      --accent: #6ee7ff;
+      --accent2: #fca5a5;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --good: #7bf59a;
+      --bad: #ff7b9c;
+      --warn: #ffd166;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      display: grid; grid-template-rows: auto 1fr auto; gap: 10px;
+    }
+    header { padding: 14px 16px; background: linear-gradient(90deg, #10131a, #0f172a 50%, #10131a); box-shadow: inset 0 -1px 0 rgba(255,255,255,0.06); }
+    header h1 { margin: 0; font-size: 18px; letter-spacing: .5px; }
+    header .sub { color: var(--muted); font-size: 12px; }
+
+    #game {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 10px; padding: 0 10px 10px 10px;
+    }
+    @media (max-width: 900px) {
+      #game { grid-template-columns: 1fr; }
+      #side { order: -1; }
+    }
+
+    #terminal, #side { background: var(--panel); border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.06); }
+    #display { height: 52vh; min-height: 300px; overflow: auto; padding: 14px; scroll-behavior: smooth; }
+    #display pre { white-space: pre-wrap; margin: 0; }
+
+    #prompt { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; padding: 10px; border-top: 1px solid rgba(255,255,255,0.06); background: #10131a; }
+    #prompt label { align-self: center; color: var(--muted); }
+    #input { background: #0b0e14; color: var(--text); border: 1px solid #262b36; border-radius: 8px; padding: 10px; font-size: 15px; }
+    #btns button { background: #0b0e14; color: var(--text); border: 1px solid #262b36; border-radius: 8px; padding: 8px 10px; margin-left: 6px; cursor: pointer; }
+    #btns button:hover { border-color: #3b4252; }
+
+    #side { display: grid; grid-template-rows: auto auto 1fr; }
+    #stats, #help { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    #stats h3, #help h3, #log h3 { margin: 0 0 8px 0; font-size: 14px; color: var(--accent); letter-spacing: .4px; }
+    #stats .row { display: grid; grid-template-columns: 1fr auto; margin: 4px 0; color: var(--muted); }
+    .bar { height: 8px; background: #0b0e14; border: 1px solid #262b36; border-radius: 999px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: linear-gradient(90deg, #2dd4bf, #60a5fa); width: 0%; }
+    #help code { background: #0b0e14; border: 1px solid #262b36; padding: 2px 6px; border-radius: 6px; }
+    #log { padding: 12px 14px; }
+    #log .event { font-size: 12px; color: var(--muted); border-left: 2px solid #262b36; padding-left: 8px; margin: 6px 0; }
+
+    .muted { color: var(--muted); }
+    .accent { color: var(--accent); }
+    .good { color: var(--good); }
+    .bad { color: var(--bad); }
+    .warn { color: var(--warn); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+    footer { color: var(--muted); font-size: 12px; padding: 8px 14px; border-top: 1px solid rgba(255,255,255,0.06); }
+    a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Arcadia MUD <span class="sub">— Rescue of the Princess</span></h1>
+    <div class="sub">Type <span class="mono">help</span> for commands. Arrow ↑/↓ to browse history. Try <span class="mono">look</span>, <span class="mono">go north</span>, <span class="mono">take torch</span>.</div>
+  </header>
+
+  <main id="game">
+    <section id="terminal">
+      <div id="display" aria-live="polite"></div>
+      <div id="prompt">
+        <label for="input">&gt;</label>
+        <input id="input" autocomplete="off" spellcheck="false" placeholder="enter command" />
+        <div id="btns">
+          <button id="saveBtn" title="Save">Save</button>
+          <button id="loadBtn" title="Load">Load</button>
+          <button id="mapBtn" title="Map">Map</button>
+        </div>
+      </div>
+    </section>
+
+    <aside id="side">
+      <div id="stats">
+        <h3>Status</h3>
+        <div class="row"><span>Location</span><b id="loc">—</b></div>
+        <div class="row"><span>HP</span><b id="hpVal">—</b></div>
+        <div class="bar"><i id="hpBar"></i></div>
+        <div class="row"><span>XP</span><b id="xpVal">0</b></div>
+        <div class="bar"><i id="xpBar" style="background: linear-gradient(90deg,#a78bfa,#60a5fa);"></i></div>
+        <div class="row"><span>Light</span><b id="lightVal">dim</b></div>
+        <div class="row"><span>Threat</span><b id="doomVal">quiet</b></div>
+        <div class="row"><span>Inventory</span><b id="invVal">(empty)</b></div>
+      </div>
+      <div id="help">
+        <h3>Quick Help</h3>
+        <div class="muted">
+          <p>Move: <code>go n|s|e|w</code> or <code>north</code> etc.</p>
+          <p>Look: <code>look</code>, Inspect: <code>examine [thing]</code></p>
+          <p>Items: <code>take</code>, <code>drop</code>, <code>use</code>, <code>inventory</code></p>
+          <p>Talk / Fight: <code>talk [npc]</code>, <code>attack [npc]</code></p>
+          <p>Meta: <code>help</code>, <code>save</code>, <code>load</code>, <code>map</code>, <code>stats</code></p>
+        </div>
+      </div>
+      <div id="log">
+        <h3>Event Log</h3>
+        <div id="events"></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer>
+    Arcadia MUD is a self‑contained single file. Progress auto‑saves on victory/defeat. Reload to replay and try alternate endings.
+  </footer>
+
+<script>
+(function(){
+  // ---------- Utility ----------
+  const el = sel => document.querySelector(sel);
+  const display = el('#display');
+  const input = el('#input');
+  const hpBar = el('#hpBar');
+  const xpBar = el('#xpBar');
+  const hpVal = el('#hpVal');
+  const xpVal = el('#xpVal');
+  const locVal = el('#loc');
+  const lightVal = el('#lightVal');
+  const doomVal = el('#doomVal');
+  const invVal = el('#invVal');
+  const events = el('#events');
+
+  function typewrite(text, speed=0){
+    // For Canvas performance and reliability, default to instant append
+    const pre = document.createElement('pre');
+    pre.innerHTML = text;
+    display.appendChild(pre);
+    display.scrollTop = display.scrollHeight;
+  }
+
+  function logEvent(msg){
+    const d = document.createElement('div');
+    d.className = 'event';
+    d.textContent = msg;
+    events.prepend(d);
+  }
+
+  function rnd(min, max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+  const storageKey = 'arcadiaMudSaveV1';
+
+  // ---------- World Data ----------
+  const world = {
+    start: 'village',
+    rooms: {
+      village: {
+        name: 'Quiet Village',
+        desc: 'Thatched roofs and tired smiles. A bulletin reads: "Princess Seraphine taken by the Gloam Court. Reward: truth." Paths lead north to the <b>wood</b>. A well sits here.',
+        exits: { n: 'wood' },
+        items: ['coin'],
+        npcs: [{id:'elder', name:'Village Elder', talk: [
+          'The king says the Gloam took her. Yet no ransom. Curious, yes?',
+          'If you must go, take light. The court loves the dark.'
+        ]}]
+      },
+      wood: {
+        name: 'Whispering Wood',
+        desc: 'Leaves gossip. A <b>path</b> bends east toward lantern-glow, west to an old shrine, and north into cliffs. You sense you are watched.',
+        exits: { e:'inn', w:'shrine', n:'cliff', s:'village' },
+        items: ['stick'],
+        npcs: [{id:'fox', name:'Talking Fox', talk:[
+          'The princess wears no chains. Make of that what you will.',
+          'Left paw says: secrets east. Right paw says: danger north.'
+        ]}]
+      },
+      inn: {
+        name: 'Lantern Inn',
+        desc: 'Warm light and dubious stew. The innkeep eyes your coin. A <b>torch</b> hangs behind the counter. A locked cellar door has a moon sigil.',
+        exits: { w:'wood' },
+        items: [],
+        npcs: [{id:'innkeep', name:'Innkeep', talk:[
+          'Coin buys torch. Torch buys safety. Safety buys stories.',
+          'Cellar? Moon key only. Ask the shrine.'
+        ], trade: { want:'coin', give:'torch' }}]
+      },
+      shrine: {
+        name: 'Ruined Shrine',
+        desc: 'A goddess of crossroads, face broken. Offerings molder. An inscription reads: <i>Light the forgotten. Speak the true name of your fear.</i> A <b>moon key</b> glints beneath dust.',
+        exits: { e:'wood' },
+        items: ['moonkey','rope'],
+        npcs: []
+      },
+      cliff: {
+        name: 'Cliff Path',
+        desc: 'Jagged steps claw upward. North yawns a chasm strung with a frayed line. East descends to a creek. Wind whispers rumors.',
+        exits: { n:'chasm', e:'creek', s:'wood' },
+        items: [], npcs: []
+      },
+      creek: {
+        name: 'Silver Creek',
+        desc: 'Water reveals what pride conceals. A <b>mirror shard</b> flashes among stones.',
+        exits: { w:'cliff' },
+        items: ['mirror'], npcs: []
+      },
+      chasm: {
+        name: 'Moonlit Chasm',
+        desc: 'A span too wide to jump. A post anchors an old hook. Across, a tunnel mouth breathes cold. With a good <b>rope</b> you might rig a crossing.',
+        exits: { s:'cliff', n:'gloamGate' },
+        need: { n:'rope' },
+        items: [], npcs: []
+      },
+      gloamGate: {
+        name: 'Gate of the Gloam',
+        desc: 'Black stone arch. Faint humming, like sleeping bees. A ward requires <b>light</b> to part the veil.',
+        exits: { s:'chasm', n:'gloamHalls' },
+        need: { light: true },
+        items: [], npcs: [{id:'wisp', name:'Gloam Wisp', talk:[
+          'Bring no lies. The court devours lies and grows fat.'
+        ]}]
+      },
+      gloamHalls: {
+        name: 'Halls of the Gloam',
+        desc: 'Shadows stitched to the ceiling. Doors lead west and east. North lies a barred keep. An inscription breathes: <i>Fear has a name. Speak it.</i>',
+        exits: { s:'gloamGate', w:'library', e:'armory', n:'keepDoor' },
+        items: [], npcs: []
+      },
+      library: {
+        name: 'Umbral Library',
+        desc: 'Books that refuse light. A ledger lists tributes to the crown. Margins whisper: <i>Seraphine paid the Gloam to vanish.</i> A <b>cipher ring</b> rests in a drawer.',
+        exits:{ e:'gloamHalls' }, items:['cipher'], npcs: []
+      },
+      armory: {
+        name: 'Silent Armory',
+        desc: 'Racks of ceremonial steel. A modest <b>blade</b> suits your hand. A healing <b>tonic</b> sits corked.',
+        exits:{ w:'gloamHalls' }, items:['sword','tonic'], npcs: []
+      },
+      keepDoor: {
+        name: 'Barred Keep',
+        desc: 'A heavy door with runes. The cipher ring may help decode: <i>Only those who name their fear may pass.</i> You could <b>say</b> a fear.',
+        exits:{ s:'gloamHalls', n:'keep' }, need:{ say:true }, items:[], npcs: []
+      },
+      keep: {
+        name: 'Inner Keep',
+        desc: 'Torches reveal a cell—but empty. Petals on stone. A balcony overlooks the court. Footsteps approach…',
+        exits:{ s:'keepDoor', n:'throne' }, items:[], npcs:[{id:'warden', name:'Gloam Warden', hp:18, atk:[3,6], hostile:true}]
+      },
+      throne: {
+        name: 'Court of the Gloam',
+        desc: 'A throne of mirrors. Upon it sits Princess Seraphine, unbound, crowned in shadow. She smiles without apology.',
+        exits:{ s:'keep' }, items:[], npcs:[{id:'seraphine', name:'Princess Seraphine', talk:[
+          'At last, a hero. Tell me: whose story have you been living? Yours? The king’s?',
+          'I hired the Gloam. I will not be pawned in a marriage to buy a war. Will you help me expose him, or drag me “home” to a cage?'
+        ]}]
+      }
+    },
+    endings: {
+      expose: 'You and Seraphine reveal ledgers proving the king’s crimes. The crowd chooses truth. The war is averted. You become the <i>King’s Reckoner</i>—never again to chase someone else’s quest.',
+      drag: 'You force Seraphine back. The king celebrates with hollow fanfare, then starts a war on your reputation. Years later you learn she escaped again, without you. The bards sing of a hero who saved no one.',
+      join: 'You refuse both crown and court, cut the ropes of destiny, and leave with Seraphine to build a small school by the creek. Legends shrink, lives flower. No one writes this ending, which is why it is the truest.'
+    }
+  };
+
+  // ---------- Player State ----------
+  const state = {
+    loc: world.start,
+    hp: 20, hpMax: 20,
+    xp: 0, level: 1,
+    inventory: [],
+    flags: { light:false, ropeRigged:false, fearNamed:false, decoded:false, metSeraphine:false },
+    doom: 0, // rises if you dally; affects encounters
+    history: [],
+    lastCmdIdx: -1
+  };
+
+  // ---------- Rendering ----------
+  function updateHUD(){
+    const room = world.rooms[state.loc];
+    locVal.textContent = room.name;
+    hpVal.textContent = `${state.hp}/${state.hpMax}`;
+    xpVal.textContent = state.xp.toString();
+    invVal.textContent = state.inventory.length ? state.inventory.join(', ') : '(empty)';
+    hpBar.style.width = `${Math.max(0, (state.hp/state.hpMax)*100)}%`;
+    xpBar.style.width = `${Math.min(100, (state.xp%20)*5)}%`;
+    lightVal.textContent = state.flags.light ? 'bright' : 'dim';
+    doomVal.textContent = ['quiet','uneasy','ominous','dire'][Math.min(3, Math.floor(state.doom/3))];
+  }
+
+  function describe(room){
+    const r = world.rooms[room];
+    let s = `<b class="accent">${r.name}</b>\n${r.desc}`;
+    if(r.items && r.items.length) s += `\nItems here: <b>${r.items.join(', ')}</b>`;
+    if(r.npcs && r.npcs.length){ s += `\nYou see: <b>${r.npcs.map(n=>n.name).join(', ')}</b>`; }
+    const exits = Object.keys(r.exits||{}).map(k=>k.toUpperCase()).join(', ');
+    s += `\nExits: ${exits || 'None'}`;
+    typewrite(s);
+  }
+
+  // ---------- Mechanics ----------
+  function checkLightNeed(target){
+    const r = world.rooms[target];
+    if(!r) return {ok:false, msg:'You bump into a wall of reality.'};
+    if(r.need && r.need.light && !state.flags.light){
+      return {ok:false, msg:'The dark here has teeth. You need a light.'};
+    }
+    return {ok:true};
+  }
+
+  function move(dir){
+    const r = world.rooms[state.loc];
+    const dmap = {north:'n', south:'s', east:'e', west:'w', n:'n', s:'s', e:'e', w:'w'};
+    const key = dmap[dir.toLowerCase()];
+    if(!key) return typewrite('Try north, south, east, or west.');
+    if(!r.exits || !r.exits[key]) return typewrite('No path that way.');
+    const target = r.exits[key];
+
+    // Check special needs
+    if(state.loc==='chasm' && key==='n'){
+      if(!state.inventory.includes('rope') && !state.flags.ropeRigged) return typewrite('You need a rope to secure a line across.');
+      state.flags.ropeRigged = true;
+      logEvent('You rig a line and cross the chasm.');
+    }
+    if(state.loc==='gloamGate' && key==='n'){
+      const need = checkLightNeed(target);
+      if(!need.ok) return typewrite(need.msg);
+    }
+    if(state.loc==='keepDoor' && key==='n'){
+      if(!state.flags.fearNamed) return typewrite('The runes remain cold. You must say what you fear.');
+    }
+
+    state.loc = target;
+    state.doom++;
+    randomEncounter();
+    updateHUD();
+    describe(state.loc);
+  }
+
+  function randomEncounter(){
+    // Mild chance, increases with doom. Avoid in safe areas.
+    const safe = ['village','inn','library','armory','throne'];
+    if(safe.includes(state.loc)) return;
+    const chance = Math.min(35, 10 + state.doom*3);
+    if(rnd(1,100) <= chance){
+      const foe = {id:'shade', name:'Creeping Shade', hp: rnd(6,10), atk:[2,4], hostile:true};
+      const room = world.rooms[state.loc];
+      room.npcs = room.npcs || [];
+      room.npcs.push(foe);
+      typewrite('<span class="bad">A Creeping Shade slides from the walls!</span>');
+    }
+  }
+
+  function attack(targetName){
+    const room = world.rooms[state.loc];
+    const foe = (room.npcs||[]).find(n=>n.name.toLowerCase().includes(targetName));
+    if(!foe) return typewrite("There's nothing like that to attack.");
+    if(!foe.hostile) typewrite('They are not attacking you… yet.');
+
+    const weapon = state.inventory.includes('sword') ? 4 : 2;
+    let turn = 0;
+    while(foe.hp>0 && state.hp>0 && turn<8){
+      // You
+      const dmg = rnd(weapon-1, weapon+3);
+      foe.hp -= dmg; typewrite(`You strike ${foe.name} for <b class="good">${dmg}</b>. (${Math.max(0,foe.hp)} hp)`);
+      if(foe.hp<=0) break;
+      // Foe
+      const edmg = rnd(foe.atk[0], foe.atk[1]);
+      state.hp -= edmg; typewrite(`${foe.name} hits you for <b class="bad">${edmg}</b>. (${Math.max(0,state.hp)} hp)`);
+      turn++;
+    }
+    if(foe.hp<=0){
+      room.npcs = room.npcs.filter(n=>n!==foe);
+      const gain = rnd(3,7);
+      state.xp += gain;
+      typewrite(`<span class="good">${foe.name} dissipates. You gain ${gain} XP.</span>`);
+      if(state.hp<=0) state.hp=1; // dramatic win
+    } else if(state.hp<=0){
+      death('A story ended where it refused to change.');
+    }
+    updateHUD();
+  }
+
+  function death(reason){
+    typewrite(`<b class="bad">You fall.</b> ${reason}\n\nReload to try again.`);
+    saveGame(true);
+    input.disabled = true;
+  }
+
+  // ---------- Commands ----------
+  const commands = {
+    help(){
+      typewrite(`Commands: look, examine X, go N/S/E/W, take X, drop X, use X, talk X, attack X, inventory, stats, map, save, load, say …, quit`);
+    },
+    look(){ describe(state.loc); },
+    stats(){ updateHUD(); typewrite(`HP ${state.hp}/${state.hpMax}, XP ${state.xp}, Light: ${state.flags.light?'on':'off'}, Doom: ${state.doom}`); },
+    inventory(){ typewrite(state.inventory.length? `You carry: <b>${state.inventory.join(', ')}</b>`: 'Your pockets are tragically empty.'); },
+    map(){ showMap(); },
+    save(){ saveGame(); typewrite('Game saved.'); },
+    load(){ if(loadGame()) { typewrite('Save loaded.'); describe(state.loc); } else typewrite('No save found.'); },
+    quit(){ typewrite('There is no quit in destiny. Only tabs.'); },
+    go(arg){ move(arg||''); },
+    north(){ move('north'); }, south(){ move('south'); }, east(){ move('east'); }, west(){ move('west'); },
+    take(arg){
+      const r = world.rooms[state.loc];
+      const i = (r.items||[]).find(x=>x.toLowerCase()===arg);
+      if(!i) return typewrite("You don't see that here.");
+      state.inventory.push(i);
+      r.items = r.items.filter(x=>x!==i);
+      typewrite(`Taken: <b>${i}</b>.`);
+      if(i==='torch'){ state.flags.light=true; lightVal.textContent='bright'; logEvent('You kindle a trustworthy flame.'); }
+      updateHUD();
+    },
+    drop(arg){
+      const idx = state.inventory.findIndex(x=>x.toLowerCase()===arg);
+      if(idx<0) return typewrite("You don't have that.");
+      const it = state.inventory.splice(idx,1)[0];
+      world.rooms[state.loc].items = world.rooms[state.loc].items || [];
+      world.rooms[state.loc].items.push(it);
+      typewrite(`Dropped: <b>${it}</b>.`);
+      if(it==='torch'){ state.flags.light=false; }
+      updateHUD();
+    },
+    use(arg){
+      const has = state.inventory.map(s=>s.toLowerCase());
+      if(!has.includes(arg)) return typewrite("You don't have that.");
+      const loc = state.loc;
+      if(arg==='moonkey' && loc==='inn'){
+        typewrite('The moon key clicks; the cellar yawns. A hidden stair to the east? Not here—feel for drafts elsewhere.');
+      }
+      if(arg==='moonkey' && loc==='inn') return; // flavor
+      if(arg==='moonkey' && loc==='inn') return; // keep simple
+      if(arg==='tonic'){
+        state.hp = Math.min(state.hpMax, state.hp+10); typewrite('You drink the tonic and feel mended.');
+        state.inventory = state.inventory.filter(x=>x!=='tonic');
+      }
+      if(arg==='cipher' && loc==='keepDoor'){
+        state.flags.decoded = true; typewrite('The cipher hums. The runes await a <b>say</b> of your fear.');
+      }
+      if(arg==='mirror' && ['gloamHalls','keepDoor','keep'].includes(loc)){
+        typewrite('In the shard you see not a hero but a carrier of rumors. Perhaps you should say what you truly fear.');
+      }
+      if(arg==='rope' && loc==='chasm'){
+        state.flags.ropeRigged = true; typewrite('You secure the rope across the chasm. The path north is now crossable.');
+      }
+      if(arg==='torch'){
+        state.flags.light = true; typewrite('You raise the torch. The dark hisses and recoils.');
+      }
+      updateHUD();
+    },
+    talk(arg){
+      const room = world.rooms[state.loc];
+      const npc = (room.npcs||[]).find(n=>n.name.toLowerCase().includes(arg));
+      if(!npc) return typewrite('Nobody by that name here.');
+      if(npc.trade && state.inventory.includes(npc.trade.want)){
+        state.inventory = state.inventory.filter(x=>x!==npc.trade.want);
+        state.inventory.push(npc.trade.give);
+        typewrite(`You trade <b>${npc.trade.want}</b> for <b>${npc.trade.give}</b>.`);
+        updateHUD();
+      }
+      if(npc.talk && npc.talk.length){ typewrite(npc.talk[rnd(0,npc.talk.length-1)]); }
+      if(npc.id==='seraphine'){ state.flags.metSeraphine = true; }
+    },
+    attack(arg){ attack(arg); },
+    examine(arg){
+      const r = world.rooms[state.loc];
+      if(!arg){ return typewrite('Examine what?'); }
+      const lower = arg.toLowerCase();
+      if(['inscription','runes','door'].includes(lower) && state.loc==='keepDoor'){
+        return typewrite('Runes: "Name your fear and pass." The cipher ring vibrates faintly.');
+      }
+      if(lower==='well' && state.loc==='village'){
+        return typewrite('You peer into the well. A voice echoes: "Stop borrowing quests. Start choosing them." Helpful? Debatable.');
+      }
+      if(lower==='path' && state.loc==='wood'){
+        return typewrite('East smells of stew and oil. West smells of old rain and forgotten vows. North tastes like risk.');
+      }
+      if(lower==='throne' && state.loc==='throne'){
+        return typewrite('A chair made of mirror shards. Sit and you see who sent you here. Discomforting craftsmanship.');
+      }
+      return typewrite("You find nothing you hadn't guessed already.");
+    },
+    say(...words){
+      const msg = words.join(' ').trim().toLowerCase();
+      if(!msg) return typewrite('Say what?');
+      logEvent(`You say: "${msg}"`);
+      if(state.loc==='keepDoor'){
+        if(!state.flags.decoded) return typewrite('The runes remain still. Perhaps you need to understand them first.');
+        // Any honest fear works. Reward authenticity with progress.
+        if(msg.includes('failure')||msg.includes('being used')||msg.includes('lonely')||msg.includes('not enough')||msg.includes('truth')||msg.includes('wrong')){
+          state.flags.fearNamed = true; typewrite('<span class="good">The door sighs and unbars. Honesty opens what force cannot.</span>');
+          updateHUD();
+        } else {
+          typewrite('Nothing happens. The door knows when you are performing.');
+        }
+      }
+      if(state.loc==='throne' && state.flags.metSeraphine){
+        if(msg.includes('expose')) return ending('expose');
+        if(msg.includes('home')||msg.includes('drag')||msg.includes('king')) return ending('drag');
+        if(msg.includes('leave')||msg.includes('school')||msg.includes('both')||msg.includes('together')) return ending('join');
+      }
+    }
+  };
+
+  // Aliases
+  commands.i = commands.inventory; commands.l = commands.look; commands.x = commands.examine;
+  ['n','s','e','w'].forEach(k=>commands[k]=()=>move(k));
+
+  // ---------- Endings ----------
+  function ending(which){
+    const text = world.endings[which] || 'The tale ends in ellipses…';
+    typewrite(`\n<b class="accent">Ending: ${which.toUpperCase()}</b>\n${text}\n\n<span class="muted">Type <b>map</b> to review your path, or reload to chase a different ending.</span>`);
+    saveGame(true);
+    input.disabled = true;
+  }
+
+  // ---------- Map ----------
+  function showMap(){
+    // Simple ASCII‑ish schematic with current location highlighted
+    const here = world.rooms[state.loc].name;
+    const map = `
+        [Cliff Path]--[Moonlit Chasm]--[Gate of the Gloam]
+              |                           |
+          [Silver Creek]            [Halls of the Gloam]
+                                        |    
+                              [Umbral Library]  [Silent Armory]
+                                        |
+                                   [Barred Keep]--[Inner Keep]--[Court of the Gloam]
+
+        [Ruined Shrine]--[Whispering Wood]--[Lantern Inn]
+                              |
+                        [Quiet Village]
+
+        You are at: >>> ${here} <<<`;
+    typewrite(`<span class="mono">${map.replaceAll('\n','<br>')}</span>`);
+  }
+
+  // ---------- Save / Load ----------
+  function saveGame(final=false){
+    const data = {state, world}; // include world so future tweaks don’t break saves
+    try{ localStorage.setItem(storageKey, JSON.stringify(data)); if(final) logEvent('Progress saved.'); }catch(e){ console.warn(e); }
+  }
+  function loadGame(){
+    try{
+      const raw = localStorage.getItem(storageKey); if(!raw) return false;
+      const data = JSON.parse(raw);
+      Object.assign(state, data.state);
+      Object.assign(world, data.world);
+      updateHUD();
+      return true;
+    }catch(e){ console.warn(e); return false; }
+  }
+
+  // ---------- Parser ----------
+  function parse(line){
+    const raw = line.trim();
+    if(!raw) return;
+    state.history.push(raw); state.lastCmdIdx = state.history.length;
+    typewrite(`<span class="muted">&gt; ${raw}</span>`);
+
+    const parts = raw.toLowerCase().split(/\s+/);
+    const cmd = parts.shift();
+    const arg = parts.join(' ');
+
+    if(commands[cmd]){
+      try{
+        if(cmd==='say') commands.say(...parts); else commands[cmd](arg);
+      } catch(e){ typewrite('That thought trips over itself.'); console.error(e); }
+    } else {
+      // smart synonyms
+      if(['get','pick','grab'].includes(cmd)) return commands.take(arg);
+      if(['use','drink','equip'].includes(cmd)) return commands.use(arg);
+      if(['talk','speak'].includes(cmd)) return commands.talk(arg);
+      if(['hit','fight','kill'].includes(cmd)) return commands.attack(arg);
+      if(['inspect'].includes(cmd)) return commands.examine(arg);
+      typewrite("Your words confuse the air.");
+    }
+    updateHUD();
+  }
+
+  // ---------- Bootstrap ----------
+  function intro(){
+    typewrite(`<b class="accent">Arcadia MUD</b> — You are a wandering hero in the realm of Arcadia.\nThe princess Seraphine has been "kidnapped" by the Gloam Court. The king begs rescue. The fox smirks. Both cannot be right.\n\nYour quest: find Seraphine and decide whose story to honor. \n`);
+    describe(state.loc);
+  }
+
+  // Input handlers
+  input.addEventListener('keydown', (e)=>{
+    if(e.key==='Enter'){
+      parse(input.value); input.value='';
+    } else if(e.key==='ArrowUp'){
+      if(state.lastCmdIdx>0){ state.lastCmdIdx--; input.value = state.history[state.lastCmdIdx]||''; setTimeout(()=>input.setSelectionRange(input.value.length,input.value.length),0); }
+      e.preventDefault();
+    } else if(e.key==='ArrowDown'){
+      if(state.lastCmdIdx < state.history.length){ state.lastCmdIdx++; input.value = state.history[state.lastCmdIdx]||''; setTimeout(()=>input.setSelectionRange(input.value.length,input.value.length),0); }
+      e.preventDefault();
+    }
+  });
+  el('#saveBtn').onclick = ()=>commands.save();
+  el('#loadBtn').onclick = ()=>commands.load();
+  el('#mapBtn').onclick = ()=>commands.map();
+
+  updateHUD();
+  intro();
+})();
+</script>
+</body>
+</html>
