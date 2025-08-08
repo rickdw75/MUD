@@ -6,7 +6,8 @@
 <title>Arcadia: A Tiny 2D Rescue</title>
 <style>
   :root {
-    --bg:#0e0e12; --fg:#e9e9f1; --muted:#a9a9b6; --accent:#7bd389; --accent2:#7aa2f7; --warn:#f7768e; --ui:#1b1b22; --ui2:#20202a;
+    /* Brighter palette so tiles aren't lost against the bg */
+    --bg:#0f1116; --fg:#eef1f7; --muted:#aab3c5; --accent:#7bd389; --accent2:#7aa2f7; --ui:#1a1f2b; --ui2:#22283a;
   }
   html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family: ui-rounded,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
   #wrap{max-width:980px;margin:0 auto;padding:12px}
@@ -14,34 +15,38 @@
   header h1{font-size:18px;font-weight:700;margin:0;letter-spacing:.3px}
   header .pill{font-size:12px;padding:4px 8px;border-radius:999px;background:var(--ui2);color:var(--muted)}
   #gamebox{display:grid;grid-template-columns:fit-content(100%) 1fr;gap:12px}
-  canvas{image-rendering: pixelated;image-rendering: crisp-edges;border:1px solid #2a2a34;background:#111}
+  canvas{image-rendering: pixelated;image-rendering: crisp-edges;border:1px solid #333a4f;background:#101319}
   #hud{display:flex;gap:10px;align-items:center;background:var(--ui);padding:8px 10px;border-radius:8px}
   #hud span{font-size:13px;color:var(--muted)}
   #hud .badge{background:var(--ui2);padding:2px 6px;border-radius:5px;color:var(--fg)}
   #sidebar{display:flex;flex-direction:column;gap:12px}
-  #panel{background:var(--ui);border:1px solid #2a2a34;border-radius:8px;padding:10px}
+  #panel{background:var(--ui);border:1px solid #2a3247;border-radius:8px;padding:10px}
   #panel h3{margin:0 0 6px 0;font-size:14px;color:var(--muted)}
   #log{height:180px;overflow:auto;font-size:13px;line-height:1.3;background:var(--ui2);border-radius:6px;padding:8px}
-  #log b{color:var(--accent)}
   #btns{display:flex;flex-wrap:wrap;gap:8px}
-  button{background:#272737;color:var(--fg);border:1px solid #33344b;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer}
+  button{background:#2a3146;color:var(--fg);border:1px solid #3a4566;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer}
   button:hover{filter:brightness(1.1)}
   #controls{display:grid;grid-template-columns:repeat(3,48px);gap:6px;justify-content:center;align-items:center}
-  .pad{width:48px;height:48px;display:flex;justify-content:center;align-items:center;background:#232332;border:1px solid #34344a;border-radius:6px;user-select:none}
+  .pad{width:48px;height:48px;display:flex;justify-content:center;align-items:center;background:#2a3146;border:1px solid #3a4566;border-radius:6px;user-select:none}
   .pad:active{filter:brightness(1.2)}
   .wide{grid-column:1/-1}
   #credits{font-size:12px;color:var(--muted);text-align:center;margin-top:6px}
-  a{color:var(--accent2);text-decoration:none}
   #toast{position:fixed;inset:auto 0 12px 0;display:flex;justify-content:center;pointer-events:none}
   #toast span{pointer-events:auto;background:#1f2a1f;border:1px solid #294129;color:#bde5bd;padding:8px 12px;border-radius:6px;font-size:13px;display:none}
   #toast span.show{display:inline-block}
+
+  /* Title overlay */
+  #title{position:fixed;inset:0;background:rgba(10,12,18,.92);display:flex;align-items:center;justify-content:center;z-index:10}
+  #title .box{background:#101623;border:1px solid #2c3858;border-radius:10px;padding:22px;max-width:520px;text-align:center}
+  #title h2{margin:0 0 8px 0}
+  #title p{margin:8px 0;color:var(--muted)}
 </style>
 </head>
 <body>
 <div id="wrap">
   <header>
     <h1>Arcadia: A Tiny 2D Rescue</h1>
-    <span class="pill">Top‑Down • Single Session • Multiple Endings</span>
+    <span class="pill">Top-Down • Single Session • Multiple Endings</span>
   </header>
 
   <div id="hud">
@@ -53,7 +58,7 @@
   </div>
 
   <div id="gamebox">
-    <canvas id="c" width="640" height="384"></canvas>
+    <canvas id="c" width="640" height="384" aria-label="Game canvas"></canvas>
 
     <div id="sidebar">
       <div id="panel">
@@ -67,7 +72,7 @@
           <button id="bReset">Reset</button>
         </div>
         <h3 style="margin-top:10px">Log</h3>
-        <div id="log"></div>
+        <div id="log" aria-live="polite"></div>
       </div>
 
       <div id="panel">
@@ -91,724 +96,362 @@
 </div>
 <div id="toast"><span id="toastMsg"></span></div>
 
+<!-- Title -->
+<div id="title">
+  <div class="box">
+    <h2>Arcadia: A Tiny 2D Rescue</h2>
+    <p>Find the Princess. Decide what “rescue” means.</p>
+    <p>Controls: Arrows/WASD to move, Shift to run, Space/Enter to talk/use.</p>
+    <button id="startBtn">Start Game</button>
+    <p style="margin-top:10px;font-size:12px">This is a single-file game. Your progress saves in the browser.</p>
+  </div>
+</div>
+
 <script>
 /* ------------------------------------------
-  Arcadia 2D — minimal top‑down adventure
-  Single file. No assets. GitHub Pages‑ready.
+  Arcadia 2D — patched build
+  - Brighter tiles
+  - Guaranteed initial render
+  - Title overlay (press Start)
 -------------------------------------------*/
 
-// ====== Config ======
-const TILE = 16;          // tile size (px)
-const SCALE = 2;          // render scale
-const VIEW_W = 20;        // tiles visible horizontally
-const VIEW_H = 12;        // tiles visible vertically
-const CANVAS_W = TILE*VIEW_W*SCALE;
-const CANVAS_H = TILE*VIEW_H*SCALE;
+const TILE=16, SCALE=2, VIEW_W=20, VIEW_H=12;
+const CANVAS_W=TILE*VIEW_W*SCALE, CANVAS_H=TILE*VIEW_H*SCALE;
 
-// World tiles
-const T = {
-  EMPTY:0, WALL:1, GRASS:2, WATER:3, DOOR:4, LOCK:5, DARK:6, CHASM:7, TORCH:8,
-  NPC:9, CHEST:10, ALTAR:11, EXIT:12, ENEMY:13, SIGN:14, STONE:15
+// Tiles
+const T={EMPTY:0,WALL:1,GRASS:2,WATER:3,DOOR:4,LOCK:5,DARK:6,CHASM:7,TORCH:8,NPC:9,CHEST:10,ALTAR:11,EXIT:12,ENEMY:13,SIGN:14,STONE:15};
+
+// Items
+const IT={ROPE:'Rope',LIGHT:'Lantern',TRUTH:'Truth Rune',KEY:'Key'};
+
+// Zones (same structure; brighter look handled in renderer)
+const ZONES={ /* --- START --- */ 
+Start:{music:'calm',hint:'A quiet grove. A trail north leads to the ridge.',
+grid:[
+[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+[1,2,2,2,2,2,2,2,2,2,14,2,2,2,2,2,2,2,2,1],
+[1,2,2,2,2,9,2,2,2,2,2,2,2,2,2,2,10,2,2,1],
+[1,2,2,2,2,2,2,2,1,1,1,2,2,2,2,2,1,1,2,1],
+[1,2,2,2,2,2,2,2,1,3,1,2,2,2,2,2,1,3,2,1],
+[1,2,2,2,2,2,2,2,1,3,1,2,2,2,2,2,1,3,2,1],
+[1,2,2,2,2,2,2,2,1,1,1,2,2,2,2,2,1,1,2,1],
+[1,2,2,2,2,2,2,2,2,2,2,2,8,2,2,2,2,2,2,1],
+[1,2,2,2,2,2,2,2,2,4,2,2,2,2,2,2,2,2,12,1],
+[1,2,2,2,2,2,2,2,2,5,2,2,2,2,2,2,2,2,2,1],
+[1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+],
+actors:[
+  {type:'npc',id:'guide',x:5,y:2,text:[
+   "You woke in the grove as if summoned by the land.",
+   "North is the ridge. East, a trader. West holds a relic.",
+   "If you seek the Princess, bring light to where light was stolen."
+  ]},
+  {type:'sign',x:10,y:1,text:["Trail to Ridge ↑","Trader →","Relic ←"]},
+  {type:'chest',x:16,y:2,item:IT.KEY,text:["You found a small brass key."]}
+],
+exits:[{x:18,y:8,to:'Ridge',tx:1,ty:8}],
+locks:[{x:9,y:9,needs:'key',openTo:T.DOOR,text:"A locked gate. A simple key should do."}]
+},
+/* Trader */ Trader:{alias:'East Hollow',music:'calm',hint:'A friendly trader under a lantern-lit awning.',
+grid:(()=>{const g=Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=>(y==0||y==11||x==0||x==19)?1:2));g[6][10]=9;g[5][10]=8;g[10][18]=12;g[1][1]=14;return g;})(),
+actors:[
+ {type:'npc',id:'trader',x:10,y:6,text:[
+  "You look underprepared. I trade goods for stories.",
+  "No? Then take this rope. I’m tired of tripping over it."
+ ],give:IT.ROPE},
+ {type:'sign',x:1,y:1,text:["East Hollow — mind your pockets."]}
+],
+exits:[{x:18,y:10,to:'Start',tx:17,ty:8}]},
+/* Relic */ Relic:{alias:'Old Stones',music:'calm',hint:'Weathered stones. Something hums beneath.',
+grid:(()=>{const g=Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=>(y==0||y==11||x==0||x==19)?1:2));g[6][10]=11;g[10][18]=12;g[2][2]=14;return g;})(),
+actors:[
+ {type:'sign',x:2,y:2,text:["Old Stones — do not whisper your name here."]},
+ {type:'altar',x:10,y:6,item:IT.TRUTH,text:[
+  "You place your hand upon the altar.",
+  "A cold idea settles in your mind: truth is a lockpick for lies."
+ ]}
+],
+exits:[{x:18,y:10,to:'Start',tx:16,ty:8}]},
+/* Ridge */ Ridge:{music:'tense',hint:'Windy crest. A chasm splits the path.',
+grid:(()=>{const g=Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=>(y==0||y==11||x==0||x==19)?1:2));for(let x=6;x<14;x++)g[6][x]=7;g[10][18]=12;g[5][10]=4;g[4][10]=6;g[3][10]=6;g[2][3]=14;g[8][8]=13;g[8][11]=13;return g;})(),
+actors:[
+ {type:'sign',x:3,y:2,text:["Mind the gap. Rope helps. Lantern helps more."]},
+ {type:'npc',id:'hermit',x:2,y:9,text:[
+  "The Princess? Not where you think.","Shadows moved long before she vanished. Bring light."
+ ]}
+],
+exits:[
+ {x:18,y:10,to:'Start',tx:18,ty:8},
+ {x:10,y:4,to:'Halls',tx:10,ty:10,needs:IT.LIGHT,fail:"It’s too dark to proceed safely."}
+],
+chasm:{y:6,x1:6,x2:13,needs:IT.ROPE,fail:"A sheer drop. A rope would make this trivial."}
+},
+/* Halls */ Halls:{music:'tense',hint:'Dust and echoes. Two wings: lore and arms.',
+grid:(()=>{const g=Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=>(y==0||y==11||x==0||x==19)?1:2));g[10][1]=12;g[6][10]=5;g[2][3]=14;g[5][4]=4;g[5][15]=4;g[7][6]=13;g[8][13]=13;return g;})(),
+actors:[{type:'sign',x:3,y:2,text:["Left: Lore. Right: Arsenal. Center: Sealed truth."]}],
+exits:[{x:1,y:10,to:'Ridge',tx:10,ty:5}],
+doors:[{x:4,y:5,to:'Lore',tx:10,ty:10},{x:15,y:5,to:'Arsenal',tx:10,ty:10}],
+seal:{x:10,y:6,needs:IT.TRUTH,text:"The mechanism judges not strength but honesty.",opensTo:'Inner'}
+},
+/* Lore */ Lore:{music:'calm',hint:'Whispering shelves, a lantern left burning.',
+grid:(()=>{const g=Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=>(y==0||y==11||x==0||x==19)?1:2));g[10][1]=12;g[5][10]=8;g[2][2]=14;return g;})(),
+actors:[{type:'sign',x:2,y:2,text:["Leave what you borrow, borrow what you leave."]},{type:'torch',x:10,y:5,item:IT.LIGHT,text:["You take the lantern. Its flame is steady but not warm."]}],
+exits:[{x:1,y:10,to:'Halls',tx:4,ty:6}]},
+/* Arsenal */ Arsenal:{music:'calm',hint:'Training dummies and a glinting blade.',
+grid:(()=>{const g=Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=>(y==0||y==11||x==0||x==19)?1:2));g[10][1]=12;g[6][10]=10;g[2][2]=14;return g;})(),
+actors:[{type:'sign',x:2,y:2,text:["Take only what you can carry into your conscience."]},{type:'chest',x:10,y:6,item:'Blade',text:["You found a tempered blade. ATK +1."]}],
+exits:[{x:1,y:10,to:'Halls',tx:15,ty:6}]},
+/* Inner */ Inner:{music:'boss',hint:'A quiet chamber. Too quiet.',
+grid:(()=>{const g=Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=>(y==0||y==11||x==0||x==19)?1:6));for(let y=2;y<10;y++)for(let x=2;x<18;x++)g[y][x]=2;g[10][10]=12;g[6][10]=9;g[5][10]=13;return g;})(),
+actors:[{type:'npc',id:'princess',x:10,y:6,text:["You came. The land said you would.","Take me away from here. Please."]}],
+exits:[{x:10,y:10,to:'Halls',tx:10,ty:6}]}
 };
 
-// Item flags
-const IT = {
-  ROPE: 'Rope',
-  LIGHT: 'Lantern',
-  TRUTH: 'Truth Rune',
-  KEY: 'Key'
-};
+// RNG
+let seed=Math.floor(Math.random()*1e9);
+function rnd(){ seed^=seed<<13; seed^=seed>>>17; seed^=seed<<5; return (seed>>>0)/4294967296; }
 
-// Zones (maps). Each zone is a grid of tile ids with special triggers.
-const ZONES = {
-  Start: {
-    music:'calm',
-    hint:'A quiet grove. A trail north leads to the ridge.',
-    grid: [
-    // 20x12
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,2,2,2,2,2,2,2,2,2,14,2,2,2,2,2,2,2,2,1],
-    [1,2,2,2,2,9,2,2,2,2,2,2,2,2,2,2,10,2,2,1],
-    [1,2,2,2,2,2,2,2,1,1,1,2,2,2,2,2,1,1,2,1],
-    [1,2,2,2,2,2,2,2,1,3,1,2,2,2,2,2,1,3,2,1],
-    [1,2,2,2,2,2,2,2,1,3,1,2,2,2,2,2,1,3,2,1],
-    [1,2,2,2,2,2,2,2,1,1,1,2,2,2,2,2,1,1,2,1],
-    [1,2,2,2,2,2,2,2,2,2,2,2,8,2,2,2,2,2,2,1],
-    [1,2,2,2,2,2,2,2,2,4,2,2,2,2,2,2,2,2,12,1],
-    [1,2,2,2,2,2,2,2,2,5,2,2,2,2,2,2,2,2,2,1],
-    [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-    ],
-    actors: [
-      {type:'npc', id:'guide', x:5, y:2, text:[
-        "You woke in the grove as if summoned by the land.",
-        "North is the ridge. East, a trader. West holds a relic.",
-        "If you seek the Princess, bring light to where light was stolen."
-      ]},
-      {type:'sign', x:10, y:1, text:["Trail to Ridge ↑", "Trader →", "Relic ←"]},
-      {type:'chest', x:16, y:2, item:IT.KEY, text:["You found a small brass key."]},
-    ],
-    exits: [
-      {x:18,y:8,to:'Ridge', tx:1,ty:8}
-    ],
-    locks: [
-      {x:9,y:9, needs:'key', openTo:T.DOOR, text:"A locked gate. A simple key should do."}
-    ]
-  },
+// State
+const state={zone:'Start',px:2,py:8,hp:5,atk:1,keys:0,inv:{},doom:0,withPrincess:false,ended:false};
 
-  Trader: { // optional shop reachable via Start east… we’ll route via Start signage only (flavor)
-    alias:'East Hollow',
-    music:'calm',
-    hint:'A friendly trader under a lantern-lit awning.',
-    grid: (() => {
-      const g = Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=> (y==0||y==11||x==0||x==19)?1:2));
-      g[6][10]=9; g[5][10]=8; g[10][18]=12; g[1][1]=14;
-      return g;
-    })(),
-    actors:[
-      {type:'npc',id:'trader',x:10,y:6, text:[
-        "You look underprepared. I trade goods for stories.",
-        "No? Then take this rope. I’m tired of tripping over it."
-      ], give:IT.ROPE},
-      {type:'sign',x:1,y:1, text:["East Hollow — mind your pockets."]}
-    ],
-    exits:[{x:18,y:10,to:'Start',tx:17,ty:8}]
-  },
+// Canvas
+const c=document.getElementById('c'); c.width=CANVAS_W; c.height=CANVAS_H;
+const ctx=c.getContext('2d');
 
-  Relic: { // West path with a relic
-    alias:'Old Stones',
-    music:'calm',
-    hint:'Weathered stones. Something hums beneath.',
-    grid:(() => {
-      const g = Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=> (y==0||y==11||x==0||x==19)?1:2));
-      g[6][10]=11; g[10][18]=12; g[2][2]=14;
-      return g;
-    })(),
-    actors:[
-      {type:'sign',x:2,y:2,text:["Old Stones — do not whisper your name here."]},
-      {type:'altar',x:10,y:6,item:IT.TRUTH, text:[
-        "You place your hand upon the altar.",
-        "A cold idea settles in your mind: truth is a lockpick for lies."
-      ]}
-    ],
-    exits:[{x:18,y:10,to:'Start',tx:16,ty:8}]
-  },
-
-  Ridge: {
-    music:'tense',
-    hint:'Windy crest. A chasm splits the path.',
-    grid:(() => {
-      const g = Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=> (y==0||y==11||x==0||x==19)?1:2));
-      // chasm
-      for(let x=6;x<14;x++) g[6][x]=7;
-      // dark doorway to Halls
-      g[10][18]=12; g[5][10]=4; g[4][10]=6; g[3][10]=6;
-      // sign
-      g[2][3]=14;
-      // enemy
-      g[8][8]=13; g[8][11]=13;
-      return g;
-    })(),
-    actors:[
-      {type:'sign',x:3,y:2,text:["Mind the gap. Rope helps. Lantern helps more."]},
-      {type:'npc',id:'hermit',x:2,y:9,text:[
-        "The Princess? Not where you think.",
-        "Shadows moved long before she vanished. Bring light."
-      ]}
-    ],
-    exits:[
-      {x:18,y:10,to:'Start',tx:18,ty:8},
-      {x:10,y:4,to:'Halls', tx:10,ty:10, needs:IT.LIGHT, fail:"It’s too dark to proceed safely."}
-    ],
-    chasm:{y:6, x1:6, x2:13, needs:IT.ROPE, fail:"A sheer drop. A rope would make this trivial."}
-  },
-
-  Halls: {
-    music:'tense',
-    hint:'Dust and echoes. Two wings: lore and arms.',
-    grid:(() => {
-      const g = Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=> (y==0||y==11||x==0||x==19)?1:2));
-      g[10][1]=12; // back exit
-      g[6][10]=5; // sealed door (truth gate ahead)
-      g[2][3]=14; // sign
-      // side rooms doors
-      g[5][4]=4; g[5][15]=4;
-      // enemies
-      g[7][6]=13; g[8][13]=13;
-      return g;
-    })(),
-    actors:[
-      {type:'sign',x:3,y:2,text:["Left: Lore. Right: Arsenal. Center: Sealed truth."]},
-    ],
-    exits:[{x:1,y:10,to:'Ridge',tx:10,ty:5}],
-    doors:[
-      {x:4,y:5,to:'Lore',tx:10,ty:10},
-      {x:15,y:5,to:'Arsenal',tx:10,ty:10}
-    ],
-    seal:{x:10,y:6, needs:IT.TRUTH, text:"The mechanism judges not strength but honesty." , opensTo:'Inner'}
-  },
-
-  Lore:{
-    music:'calm',
-    hint:'Whispering shelves, a lantern left burning.',
-    grid:(() => {
-      const g = Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=> (y==0||y==11||x==0||x==19)?1:2));
-      g[10][1]=12; g[5][10]=8; g[2][2]=14;
-      return g;
-    })(),
-    actors:[
-      {type:'sign',x:2,y:2,text:["Leave what you borrow, borrow what you leave."]},
-      {type:'torch',x:10,y:5, item:IT.LIGHT, text:["You take the lantern. Its flame is steady but not warm."]}
-    ],
-    exits:[{x:1,y:10,to:'Halls',tx:4,ty:6}]
-  },
-
-  Arsenal:{
-    music:'calm',
-    hint:'Training dummies and a glinting blade.',
-    grid:(() => {
-      const g = Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=> (y==0||y==11||x==0||x==19)?1:2));
-      g[10][1]=12; g[6][10]=10; g[2][2]=14;
-      return g;
-    })(),
-    actors:[
-      {type:'sign',x:2,y:2,text:["Take only what you can carry into your conscience."]},
-      {type:'chest',x:10,y:6,item:'Blade', text:["You found a tempered blade. ATK +1."]}
-    ],
-    exits:[{x:1,y:10,to:'Halls',tx:15,ty:6}]
-  },
-
-  Inner:{
-    music:'boss',
-    hint:'A quiet chamber. Too quiet.',
-    grid:(() => {
-      const g = Array.from({length:12},(_,y)=>Array.from({length:20},(_,x)=> (y==0||y==11||x==0||x==19)?1:6));
-      // inner ring
-      for(let y=2;y<10;y++)for(let x=2;x<18;x++) g[y][x]=2;
-      g[10][10]=12; // back
-      g[6][10]=9;   // “princess”
-      g[5][10]=13;  // lurking enemy above
-      return g;
-    })(),
-    actors:[
-      {type:'npc',id:'princess',x:10,y:6,text:[
-        "You came. The land said you would.",
-        "Take me away from here. Please."
-      ]},
-    ],
-    exits:[{x:10,y:10,to:'Halls',tx:10,ty:6}]
-  }
-};
-
-// ====== Simple RNG ======
-let seed = Math.floor(Math.random()*1e9);
-function rnd(){ // xorshift32
-  seed ^= seed<<13; seed ^= seed>>>17; seed ^= seed<<5; return (seed>>>0)/4294967296;
-}
-function choice(a){return a[(rnd()*a.length)|0];}
-
-// ====== Game State ======
-const state = {
-  zone: 'Start',
-  px: 2, py: 8,
-  hp: 5, atk:1, keys:0,
-  inv: {}, doom:0, rescued:false, withPrincess:false, ended:false
-};
-
-// ====== Canvas & Rendering ======
-const c = document.getElementById('c');
-c.width = CANVAS_W; c.height = CANVAS_H;
-const ctx = c.getContext('2d');
-
+// BRIGHTER tile renderer
 function drawTile(x,y,t){
-  // base colors
-  const col = {
-    [T.EMPTY]:'#000',
-    [T.WALL]:'#2b2b35',
-    [T.GRASS]:'#1b2b1b',
-    [T.WATER]:'#16314a',
-    [T.DOOR]:'#69533a',
-    [T.LOCK]:'#5b5b6f',
-    [T.DARK]:'#0a0a0f',
-    [T.CHASM]:'#0c0a0a',
-    [T.TORCH]:'#b08933',
-    [T.NPC]:'#22283b',
-    [T.CHEST]:'#60472e',
-    [T.ALTAR]:'#2e4c5c',
-    [T.EXIT]:'#263046',
-    [T.ENEMY]:'#351e2e',
-    [T.SIGN]:'#33402d',
-    [T.STONE]:'#333344'
-  }[t] || '#000';
-
-  // tile rect
+  const col={
+    [T.EMPTY]:'#0c0f14',
+    [T.WALL]:'#475066',
+    [T.GRASS]:'#2e7c45',
+    [T.WATER]:'#2171b3',
+    [T.DOOR]:'#8c6a3d',
+    [T.LOCK]:'#8a8fb8',
+    [T.DARK]:'#09101c',
+    [T.CHASM]:'#17181d',
+    [T.TORCH]:'#d8a648',
+    [T.NPC]:'#314964',
+    [T.CHEST]:'#7a5a3a',
+    [T.ALTAR]:'#3a7492',
+    [T.EXIT]:'#39507c',
+    [T.ENEMY]:'#7d3a55',
+    [T.SIGN]:'#536a3a',
+    [T.STONE]:'#556080'
+  }[t] || '#222';
   rect(x,y,col);
+  // readable details
+  if(t===T.GRASS){ pixel(x+3,y+3,'#3b9a57'); pixel(x+12,y+10,'#3b9a57'); }
+  if(t===T.WALL){ pixel(x+6,y+6,'#5b6781'); pixel(x+10,y+9,'#5b6781'); }
+  if(t===T.WATER){ pixel(x+4,y+4,'#2b8bd9'); pixel(x+11,y+7,'#2b8bd9'); }
+  if(t===T.CHASM){ pixel(x+8,y+8,'#0a0b0e'); pixel(x+6,y+10,'#0a0b0e'); }
+  if(t===T.DOOR){ rect(x+6,y+2,'#6d532f'); pixel(x+9,y+8,'#e0c06a'); }
+  if(t===T.LOCK){ rect(x+5,y+6,'#9aa0cf'); pixel(x+9,y+8,'#e0c06a'); }
+  if(t===T.TORCH){ rect(x+6,y+4,'#7a5d2c'); pixel(x+8,y+5, ['#ffd27a','#ffc04d','#ffe0a6','#ffb347'][(rnd()*4)|0]); }
+  if(t===T.SIGN){ rect(x+6,y+6,'#7e6a46'); pixel(x+7,y+5,'#e7d8a7'); }
+}
 
-  // decorative details
-  const k = (x*73856093 ^ y*19349663) & 7;
-  if(t===T.GRASS){
-    if(k<3) pixel(x+ (k*3)&15, y+ (k*5)&15, '#284f2a');
-    if(k===0) pixel(x+12,y+3,'#2f5f30');
-  } else if(t===T.WALL){
-    for(let i=0;i<4;i++) pixel(x+(i*4)&15, y+((i*2+1)&15),'#3a3a47');
-  } else if(t===T.WATER){
-    pixel(x+3,y+2,'#1e4464'); pixel(x+10,y+8,'#1e4464');
-  } else if(t===T.CHASM){
-    pixel(x+8,y+7,'#120d0d'); pixel(x+6,y+10,'#191212');
-  } else if(t===T.DOOR){
-    rect(x+6,y+2,'#4f3d2b'); pixel(x+8,y+8,'#caa85a');
-  } else if(t===T.LOCK){
-    rect(x+5,y+6,'#747496'); pixel(x+8,y+8,'#caa85a');
-  } else if(t===T.TORCH){
-    rect(x+6,y+4,'#7a5d2c'); pixel(x+8,y+5, flicker());
-  } else if(t===T.CHEST){
-    rect(x+4,y+6,'#6c5239'); rect(x+4,y+6,'#6c5239'); pixel(x+8,y+8,'#caa85a');
-  } else if(t===T.ALTAR){
-    rect(x+4,y+7,'#3b6173'); pixel(x+8,y+5,'#74d7ff');
-  } else if(t===T.EXIT){
-    rect(x+6,y+3,'#2b3855');
-  } else if(t===T.SIGN){
-    rect(x+6,y+6,'#6a5a39'); pixel(x+7,y+5,'#bda474');
-  } else if(t===T.ENEMY){
-    // passive enemy marker
-    pixel(x+7,y+7,'#d26b8a'); pixel(x+8,y+7,'#d26b8a');
-  }
-}
-function flicker(){
-  return ['#ffd27a','#ffc04d','#ffe0a6','#ffb347'][ (rnd()*4)|0 ];
-}
-function pixel(tx,ty,color){
-  ctx.fillStyle=color;
-  ctx.fillRect(tx*TILE*SCALE, ty*TILE*SCALE, SCALE, SCALE);
-}
-function rect(tx,ty,color){
-  ctx.fillStyle=color;
-  ctx.fillRect(tx*TILE*SCALE, ty*TILE*SCALE, TILE*SCALE, TILE*SCALE);
-}
-function drawPlayer(x,y){
-  // simple hero sprite
-  const base='#b2d389', hair='#3a3a47', trim='#7aa2f7';
-  rect(x,y,base);
-  pixel(x+7,y+3,hair); pixel(x+8,y+3,hair);
-  pixel(x+7,y+8,trim);
-}
-function drawPrincess(x,y){
-  const dress='#e2a7c5', hair='#e6d6a8';
-  rect(x,y,dress);
-  pixel(x+7,y+3,hair); pixel(x+8,y+3,hair);
-}
+function pixel(tx,ty,color){ ctx.fillStyle=color; ctx.fillRect(tx*TILE*SCALE,ty*TILE*SCALE,SCALE,SCALE); }
+function rect(tx,ty,color){ ctx.fillStyle=color; ctx.fillRect(tx*TILE*SCALE,ty*TILE*SCALE,TILE*SCALE,TILE*SCALE); }
+
+function drawPlayer(x,y){ rect(x,y,'#c5eb98'); pixel(x+7,y+3,'#3a3a47'); pixel(x+7,y+8,'#7aa2f7'); }
+function drawPrincess(x,y){ rect(x,y,'#f0b3d0'); pixel(x+7,y+3,'#f3e5b5'); }
+
+// HUD helpers
+function h(id){return document.getElementById(id);}
 function drawHUD(){
-  h('hp').textContent=state.hp;
-  h('atk').textContent=state.atk;
+  h('hp').textContent=state.hp; h('atk').textContent=state.atk;
   h('keys').textContent=state.keys;
   const inv = Object.keys(state.inv).filter(k=>state.inv[k]);
   h('inv').textContent = inv.length? inv.join(', ') : '—';
   h('zone').textContent = state.zone;
 }
 
-// ====== Map helpers ======
+// Map helpers
 function currentZone(){return ZONES[state.zone];}
-function isSolid(t){
-  return t===T.WALL || t===T.STONE || t===T.LOCK;
-}
-function enemyAt(z,x,y){ return z.grid[y][x]===T.ENEMY; }
-function npcAt(z,x,y){ return z.grid[y][x]===T.NPC; }
-function signAt(z,x,y){ return z.grid[y][x]===T.SIGN; }
-function doorAt(z,x,y){ return z.grid[y][x]===T.DOOR; }
-function chestAt(z,x,y){ return z.grid[y][x]===T.CHEST; }
-function torchAt(z,x,y){ return z.grid[y][x]===T.TORCH; }
-function altarAt(z,x,y){ return z.grid[y][x]===T.ALTAR; }
-function exitAt(z,x,y){ return z.grid[y][x]===T.EXIT; }
-function darkAt(z,x,y){ return z.grid[y][x]===T.DARK; }
-function chasmAt(z,x,y){ return z.grid[y][x]===T.CHASM; }
+function isSolid(t){ return t===T.WALL || t===T.STONE || t===T.LOCK; }
 
-function setTile(z,x,y,t){ z.grid[y][x]=t; }
-
-// ====== UI ======
 function log(...lines){
-  const box = h('log');
-  for(const line of lines){
-    const p = document.createElement('div');
-    p.textContent = line;
-    box.appendChild(p);
-  }
+  const box=h('log');
+  for(const line of lines){ const p=document.createElement('div'); p.textContent=line; box.appendChild(p); }
   box.scrollTop = box.scrollHeight;
 }
-function toast(msg, ms=1600){
-  const t = h('toastMsg');
-  t.textContent = msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), ms);
-}
-function h(id){return document.getElementById(id);}
+function toast(msg,ms=1600){ const t=h('toastMsg'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),ms); }
 
-// ====== Input ======
-const keys = {};
+// Input
+const keys={};
 document.addEventListener('keydown',e=>{
-  keys[e.key.toLowerCase()] = true;
-  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
-  if(e.key===' '||e.key==='Enter'){ act(); e.preventDefault(); }
+  keys[e.key.toLowerCase()]=true;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  if(e.key===' '||e.key==='Enter') act();
 });
-document.addEventListener('keyup',e=>{ keys[e.key.toLowerCase()] = false; });
+document.addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; });
 document.getElementById('bTalk').onclick=()=>talk();
 document.getElementById('bUse').onclick =()=>act();
 document.getElementById('bSave').onclick=()=>saveGame();
 document.getElementById('bLoad').onclick=()=>loadGame(true);
 document.getElementById('bHelp').onclick=()=>help();
 document.getElementById('bReset').onclick=()=>resetGame();
-
 for(const el of document.querySelectorAll('.pad')){
   el.addEventListener('click',()=>{
-    const dx = +el.dataset.dx, dy=+el.dataset.dy;
+    const dx=+el.dataset.dx, dy=+el.dataset.dy;
     if(el.id==='padRun'){ keys['shift']=true; setTimeout(()=>keys['shift']=false,250); return; }
     if(el.id==='padAct'){ act(); return; }
     move(dx,dy);
   });
 }
 
-// ====== Core game loop ======
-let last = 0;
+// Loop
+let running=false;
+let last=0;
 function loop(ts){
-  const dt = (ts-last)/16.7; last=ts;
-  update(dt);
-  render();
+  if(!running) return;
+  const dt=(ts-last)/16.7; last=ts;
+  update(dt); render();
   requestAnimationFrame(loop);
 }
-requestAnimationFrame(loop);
+function startGame(){
+  if(running) return;
+  document.getElementById('title').style.display='none';
+  running=true; last=performance.now(); render(); requestAnimationFrame(loop);
+}
 
+// Update / Move
 function update(){
-  let dx=0, dy=0;
+  let dx=0,dy=0;
   if(keys['arrowup']||keys['w']) dy=-1;
   if(keys['arrowdown']||keys['s']) dy=1;
   if(keys['arrowleft']||keys['a']) dx=-1;
   if(keys['arrowright']||keys['d']) dx=1;
-  if(dx||dy){
-    move(dx,dy, keys['shift']||keys['shiftleft']);
-  }
+  if(dx||dy) move(dx,dy, keys['shift']||keys['shiftleft']);
 }
-
-function move(dx,dy,run=false){
-  const z = currentZone();
-  const nx = clamp(state.px+dx,1,18);
-  const ny = clamp(state.py+dy,1,10);
-  const tile = z.grid[ny][nx];
-
-  // collisions & gates
+function move(dx,dy){
+  const z=currentZone();
+  const nx=Math.max(1,Math.min(18,state.px+dx));
+  const ny=Math.max(1,Math.min(10,state.py+dy));
+  const tile=z.grid[ny][nx];
   if(isSolid(tile)) return;
 
-  // chasm check
-  if(tile===T.CHASM){
-    if(!state.inv[IT.ROPE]){ toast((z.chasm && z.chasm.fail) || "A deadly drop."); return; }
-  }
-  // darkness check (tile-level)
+  // chasm
+  if(tile===T.CHASM && !state.inv[IT.ROPE]){ toast("A deadly drop."); return; }
+  // dark
   if(tile===T.DARK && !state.inv[IT.LIGHT]){ toast("Too dark to step safely."); return; }
 
   state.px=nx; state.py=ny;
 
-  // random encounter in tense zones
-  if(state.zone==='Ridge'||state.zone==='Halls'||state.zone==='Inner'){
-    if(rnd()<0.065) combat({hp:2+((state.doom/5)|0), atk:1});
-  }
-
   // exits
-  const ex = (currentZone().exits||[]).find(e=>e.x===state.px && e.y===state.py);
+  const ex=(z.exits||[]).find(e=>e.x===state.px && e.y===state.py);
   if(ex){
-    if(ex.needs && !state.inv[ex.needs]){ toast(ex.fail || "It won't let you pass."); return; }
-    goZone(ex.to, ex.tx, ex.ty);
-    return;
+    if(ex.needs && !state.inv[ex.needs]){ toast(ex.fail||"It won't let you pass."); return; }
+    goZone(ex.to,ex.tx,ex.ty); return;
   }
 
-  // doors within Halls
+  // Halls doors + seal
   if(state.zone==='Halls'){
-    const d = (ZONES.Halls.doors||[]).find(e=>e.x===state.px && e.y===state.py);
-    if(d){ goZone(d.to, d.tx, d.ty); return; }
-    // sealed truth door
-    const s = ZONES.Halls.seal;
+    const d=(ZONES.Halls.doors||[]).find(e=>e.x===state.px && e.y===state.py);
+    if(d){ goZone(d.to,d.tx,d.ty); return; }
+    const s=ZONES.Halls.seal;
     if(state.px===s.x && state.py===s.y){
       if(state.inv[IT.TRUTH]){
         log("The seal yields to your conviction.");
         ZONES.Halls.grid[s.y][s.x]=T.DOOR;
         ZONES.Halls.doors.push({x:s.x,y:s.y,to:s.opensTo,tx:10,ty:10});
-      } else {
-        toast(s.text);
-      }
+      } else toast(s.text);
     }
   }
 
-  // increase doom over time
-  state.doom++;
-}
-
-function act(){
-  const z = currentZone();
-  // talk priority: adjacent NPC/sign
-  const adj = neighbors(state.px,state.py);
-  for(const p of adj){
-    if(npcAt(z,p.x,p.y)){ return talk(p.x,p.y); }
-    if(signAt(z,p.x,p.y)){ return readSign(p.x,p.y); }
+  // Random tiny encounters
+  if(['Ridge','Halls','Inner'].includes(state.zone) && Math.random()<0.06){
+    combat({hp:2,atk:1});
   }
-
-  // chests / torches / altar underfoot
-  if(chestAt(z,state.px,state.py)){ openChest(); return; }
-  if(torchAt(z,state.px,state.py)){ takeTorch(); return; }
-  if(altarAt(z,state.px,state.py)){ touchAltar(); return; }
-
-  // doors underfoot (open with key if locked nearby)
-  if(doorAt(z,state.px,state.py)){ return; }
-
-  // default talk if standing next to NPC not found above
-  talk();
 }
 
-function talk(ax,ay){
-  const z = currentZone();
-  // targeted npc
-  const npc = (z.actors||[]).find(a=>a.type==='npc' && a.x===ax && a.y===ay)
-         || (z.actors||[]).find(a=>a.type==='npc' && manhattan(a.x,a.y,state.px,state.py)<=1);
+// Actions
+function act(){
+  const z=currentZone();
+  // underfoot interactions
+  const t=z.grid[state.py][state.px];
+  if(t===T.CHEST) return openChest();
+  if(t===T.TORCH) return takeTorch();
+  if(t===T.ALTAR) return touchAltar();
+
+  // nearby talk/sign
+  const adj=[{x:state.px+1,y:state.py},{x:state.px-1,y:state.py},{x:state.px,y:state.py+1},{x:state.px,y:state.py-1}];
+  const npc=(z.actors||[]).find(a=>a.type==='npc' && adj.some(p=>p.x===a.x && p.y===a.y));
+  if(npc) return talk(npc.x,npc.y);
+  const sign=(z.actors||[]).find(a=>a.type==='sign' && adj.some(p=>p.x===a.x && p.y===a.y));
+  if(sign) return readSign(sign.x,sign.y);
+
+  toast("Nothing to do.");
+}
+function talk(x,y){
+  const z=currentZone();
+  const npc=(z.actors||[]).find(a=>a.type==='npc' && a.x===x && a.y===y)
+      || (z.actors||[]).find(a=>a.type==='npc' && Math.abs(a.x-state.px)+Math.abs(a.y-state.py)<=1);
   if(!npc){ toast("You mutter to yourself."); return; }
 
   if(npc.id==='trader' && !state.inv[IT.ROPE]){
-    state.inv[IT.ROPE]=true;
-    log("Trader:","“Take the rope. The ridge eats the careless.”");
-    toast("Got: Rope");
-    drawHUD(); return;
+    state.inv[IT.ROPE]=true; log("Trader:","“Take the rope. The ridge eats the careless.”"); toast("Got: Rope"); drawHUD(); return;
   }
-  if(npc.id==='guide'){
-    printLines(npc.text); return;
-  }
-  if(npc.id==='hermit'){
-    printLines(npc.text); return;
-  }
+  if(npc.id==='guide' || npc.id==='hermit'){ npc.text.forEach(s=>log(s)); return; }
   if(state.zone==='Inner' && npc.id==='princess'){
-    // subtle twist: rescue vs reveal
     if(!state.withPrincess){
-      state.withPrincess=true;
-      log("Princess:","“Let’s go. Quickly.”");
-      toast("She follows.");
-      // remove lurking enemy if you carry TRUTH (prevents ambush)
+      state.withPrincess=true; log("Princess:","“Let’s go. Quickly.”"); toast("She follows.");
+      // remove lurking enemy if you carry TRUTH
       if(state.inv[IT.TRUTH]) ZONES.Inner.grid[5][10]=T.GRASS;
-      return;
-    } else {
-      log("Princess:","“Why do you hesitate?”");
-      return;
-    }
+    } else log("Princess:","“Why do you hesitate?”");
   }
 }
+function readSign(x,y){ const s=(currentZone().actors||[]).find(a=>a.type==='sign' && a.x===x && a.y===y); if(s) s.text.forEach(t=>log(t)); }
+function openChest(){ const z=currentZone(); const a=(z.actors||[]).find(e=>e.type==='chest' && e.x===state.px && e.y===state.py); if(!a) return; if(a.item===IT.KEY){state.keys++;toast("Got: Key");} else if(a.item==='Blade'){state.atk=Math.max(state.atk,2);toast("ATK +1");} z.grid[state.py][state.px]=T.GRASS; drawHUD(); }
+function takeTorch(){ const z=currentZone(); if(!state.inv[IT.LIGHT]){state.inv[IT.LIGHT]=true;toast("Got: Lantern");} z.grid[state.py][state.px]=T.GRASS; drawHUD(); }
+function touchAltar(){ const z=currentZone(); if(!state.inv[IT.TRUTH]){state.inv[IT.TRUTH]=true; log("You place your hand upon the altar.","A cold idea settles in your mind: truth is a lockpick for lies."); toast("Got: Truth Rune"); drawHUD(); } else toast("The altar is quiet."); }
 
-function readSign(x,y){
-  const a = (currentZone().actors||[]).find(e=>e.type==='sign' && e.x===x && e.y===y);
-  if(!a) return;
-  printLines(a.text);
-}
+function combat(e){ log("A shadow rushes you!"); if(Math.random()<0.5){ log("You strike first.","It reels."); } else { state.hp-=1; log("It strikes first!","You take 1."); if(state.hp<=0){ gameOver(); return; } } if(Math.random()<0.12){ state.keys++; toast("Found: Key"); } drawHUD(); }
+function gameOver(){ if(state.ended) return; state.ended=true; log("You fall. The land exhales. Your story ends here."); toast("Game Over"); }
 
-function openChest(){
-  const z = currentZone();
-  const a = (z.actors||[]).find(e=>e.type==='chest' && e.x===state.px && e.y===state.py);
-  if(!a) return;
-  if(a.item===IT.KEY){ state.keys++; toast("Got: Key"); }
-  else if(a.item==='Blade'){ state.atk = Math.max(state.atk,2); toast("ATK +1"); }
-  setTile(z,state.px,state.py,T.GRASS);
-  // update possible locks in Start
-  if(state.zone==='Start'){
-    const lock = (ZONES.Start.locks||[])[0];
-    if(lock && lock.needs==='key'){ // soft hint
-      log("You palm the brass key. A simple lock might yield.");
-    }
-  }
-  drawHUD();
-}
-
-function takeTorch(){
-  const z = currentZone();
-  const a = (z.actors||[]).find(e=>e.type==='torch' && e.x===state.px && e.y===state.py);
-  if(!a) return;
-  if(!state.inv[IT.LIGHT]){ state.inv[IT.LIGHT]=true; toast("Got: Lantern"); }
-  setTile(z,state.px,state.py,T.GRASS);
-  drawHUD();
-}
-
-function touchAltar(){
-  const z = currentZone();
-  const a = (z.actors||[]).find(e=>e.type==='altar' && e.x===state.px && e.y===state.py);
-  if(!a) return;
-  if(!state.inv[IT.TRUTH]){
-    state.inv[IT.TRUTH]=true;
-    printLines(a.text);
-    toast("Got: Truth Rune");
-    drawHUD();
-  } else {
-    toast("The altar is quiet.");
-  }
-}
-
-function combat(enemy){
-  // super light encounter
-  const eHP = {v:enemy.hp};
-  const eATK = enemy.atk + ((rnd()<0.2)?1:0);
-  const dmgToEnemy = Math.max(1, state.atk);
-  const dmgToYou = Math.max(1, eATK - (state.inv[IT.LIGHT]?0:0)); // lantern helps awareness
-
-  // Opening
-  log("A shadow rushes you!");
-  // One‑round resolution to keep it brisk
-  if(rnd()<0.5){
-    eHP.v -= dmgToEnemy;
-    log("You strike first.", `It reels for ${dmgToEnemy}.`);
-  } else {
-    state.hp -= dmgToYou;
-    log("It strikes first!", `You take ${dmgToYou}.`);
-  }
-  // Counter
-  if(eHP.v>0){
-    eHP.v -= dmgToEnemy;
-    log("You finish it.", `It fades.`);
-  } else {
-    log("It collapses into smoke.");
-  }
-  if(state.hp<=0) return gameOver();
-  // small chance to drop a key
-  if(rnd()<0.12){ state.keys++; toast("Found: Key"); }
-  drawHUD();
-}
-
-function gameOver(){
-  if(state.ended) return;
-  state.ended=true;
-  log("You fall. The land exhales. Your story ends here.");
-  toast("Game Over");
-}
-
-function checkEnding(){
-  if(state.ended) return;
-  if(state.zone==='Start' && state.withPrincess){
-    // Reaching Start while escorting: evaluate truth
-    state.ended=true;
-    // If you have Truth Rune, you “see” the deception and choose
-    if(state.inv[IT.TRUTH]){
-      log("At the grove’s edge, the lantern reveals what the world refused.");
-      log("The Princess smiles, but the shadow behind her smiles wider.");
-      log("You lower the blade. “Not today.” The shadow recoils and unweaves.");
-      log("The land steadies. She is freed — and so are you.");
-      toast("Ending: True Rescue");
-    } else {
-      log("You return triumphant. Songs will be sung.");
-      log("The songs won’t mention how the shadows learned your name.");
-      toast("Ending: Hollow Victory");
-    }
-  }
-}
-
-// ====== Zone transitions ======
-function goZone(name, tx, ty){
+// Zone change
+function goZone(name,tx,ty){
   state.zone=name; state.px=tx; state.py=ty;
-  const z = currentZone();
-  log(`→ ${name}${z.alias? ' ('+z.alias+')':''}.`, z.hint || "");
-  // Special entrance rules
-  if(name==='Ridge'){
-    const ch=z.chasm;
-    if(ch && state.py===ch.y && state.px>=ch.x1 && state.px<=ch.x2 && !state.inv[IT.ROPE]){
-      // spawn on safe tile
-      state.py = ch.y+1;
-    }
-  }
+  const z=currentZone();
+  log(`→ ${name}${z.alias? ' ('+z.alias+')':''}.`, z.hint||"");
   drawHUD();
+  // wire Start side exits (once)
+  if(name==='Start' && !(ZONES.Start._wired)){ ZONES.Start._wired=true; ZONES.Start.exits.push({x:9,y:8,to:'Trader',tx:2,ty:10}); ZONES.Start.exits.push({x:3,y:8,to:'Relic',tx:2,ty:10}); }
 }
 
-// ====== Render ======
+// Render (full 20×12 view; always draws immediately)
 function render(){
-  ctx.fillStyle='#0b0b10';
-  ctx.fillRect(0,0, CANVAS_W, CANVAS_H);
-
-  const z = currentZone();
+  ctx.fillStyle='#0b0e14'; ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+  const z=currentZone();
   for(let y=0;y<VIEW_H;y++){
     for(let x=0;x<VIEW_W;x++){
-      const tx = x, ty = y;
-      const t = z.grid[ty]?.[tx] ?? T.WALL;
-      drawTile(tx,ty,t);
+      const t = (z.grid[y] && z.grid[y][x] !== undefined) ? z.grid[y][x] : T.WALL;
+      drawTile(x,y,t);
     }
   }
-
-  // draw actors
-  for(const a of (z.actors||[])){
-    if(a.type==='npc'){
-      drawNPC(a.x,a.y);
-    } else if(a.type==='sign'){
-      // sign already hinted by tile; extra peg:
-      pixel(a.x+8,a.y+6,'#c2d9a0');
-    } else if(a.type==='chest'){
-      // chest tile already drawn
-    } else if(a.type==='torch'){
-      // torch tile already drawn
-    } else if(a.type==='altar'){
-      // altar tile already drawn
-    }
-  }
-
-  // princess sprite in Inner
-  if(z===ZONES.Inner){
-    drawPrincess(10,6);
-  }
-
-  // player (and follower)
+  // actors
+  for(const a of (z.actors||[])){ if(a.type==='npc'){ drawNPC(a.x,a.y); } }
+  if(z===ZONES.Inner){ drawPrincess(10,6); }
   drawPlayer(state.px,state.py);
-  if(state.withPrincess){
-    // follow at one tile behind
-    drawPrincess(clamp(state.px-1,1,18), state.py);
-  }
-
-  // post checks
-  if(state.zone==='Start' && state.withPrincess) checkEnding();
+  if(state.withPrincess){ drawPrincess(Math.max(1, state.px-1), state.py); }
 }
+function drawNPC(x,y){ rect(x,y,'#3a5676'); pixel(x+7,y+6,'#e8edf6'); }
 
-function drawNPC(x,y){
-  // robe + face
-  rect(x,y,'#22314a'); pixel(x+7,y+6,'#d7d7e0');
-}
-
-// ====== Utils ======
-function clamp(v,min,max){return Math.max(min,Math.min(max,v));}
-function neighbors(x,y){ return [{x:x+1,y},{x:x-1,y},{x,y+1},{x,y-1}].filter(p=>p.x>=1&&p.x<=18&&p.y>=1&&p.y<=10); }
-function manhattan(x1,y1,x2,y2){ return Math.abs(x1-x2)+Math.abs(y1-y2); }
-function printLines(lines){ for(const s of lines) log(s); }
-
-// ====== Save/Load ======
+// Save/Load
 const SAVE_KEY='arcadia2d_save';
-function saveGame(){
-  localStorage.setItem(SAVE_KEY, JSON.stringify(state));
-  toast("Saved");
-}
-function loadGame(announce){
-  const s = localStorage.getItem(SAVE_KEY);
-  if(!s){ if(announce) toast("No save found"); return; }
-  const obj = JSON.parse(s);
-  Object.assign(state,obj);
-  toast("Loaded");
-  drawHUD();
-}
-function resetGame(){
-  localStorage.removeItem(SAVE_KEY);
-  Object.assign(state,{zone:'Start',px:2,py:8,hp:5,atk:1,keys:0,inv:{},doom:0,rescued:false,withPrincess:false,ended:false});
-  log("New journey begins.");
-  drawHUD();
-}
+function saveGame(){ localStorage.setItem(SAVE_KEY, JSON.stringify(state)); toast("Saved"); }
+function loadGame(announce){ const s=localStorage.getItem(SAVE_KEY); if(!s){ if(announce) toast("No save found"); return; } Object.assign(state, JSON.parse(s)); toast("Loaded"); drawHUD(); render(); }
+function resetGame(){ localStorage.removeItem(SAVE_KEY); Object.assign(state,{zone:'Start',px:2,py:8,hp:5,atk:1,keys:0,inv:{},doom:0,withPrincess:false,ended:false}); log("New journey begins."); drawHUD(); render(); }
 
-// ====== Boot ======
-function init(){
-  // Wire Start zone extra exits
-  ZONES.Start.exits.push({x:9,y:8,to:'Trader',tx:2,ty:10});
-  ZONES.Start.exits.push({x:3,y:8,to:'Relic',tx:2,ty:10});
-  log("You wake in the grove, a name on your tongue that isn’t yours.");
-  drawHUD();
-}
-help = function(){
-  log(
-    "Controls: Arrows/WASD move, Shift runs. Space/Enter: Talk/Use.",
-    "Goal: Find and rescue the Princess.",
-    "Hints: Rope crosses chasms. Lantern pierces darkness. Truth opens seals.",
-    "Save/Load uses your browser storage."
-  );
-}
+// Help + init
+function help(){ log("Controls: Arrows/WASD move, Shift runs. Space/Enter talk/use.","Goal: Find and rescue the Princess.","Hints: Rope crosses chasms. Lantern pierces darkness. Truth opens seals.","Save/Load uses your browser storage."); }
+function init(){ drawHUD(); render(); log("Press Start when ready."); }
 init();
 
+// Title start
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.addEventListener('keydown',e=>{ if(!running) startGame(); },{once:true});
 </script>
 </body>
 </html>
